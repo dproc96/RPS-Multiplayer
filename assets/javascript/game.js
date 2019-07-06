@@ -63,8 +63,9 @@ var Account = {
     },
     logOut() {
         localStorage.clear();
+        database.ref().child(Account.activeUser.username).update({ "partner": null });
         Account.activeUser = null;
-        $("#status").html("<p>You are not logged in</p>");
+        $("#account").empty();
         Account.writeLogInModal();
     },
     pullUser() {
@@ -88,15 +89,15 @@ var Account = {
         console.log(this.activeUser);
     },
     writeLoggedInState() {
-        let statusDiv = $("#status");
-        statusDiv.empty();
+        let account = $("#account");
+        account.empty();
         let p = $("<p>");
         let button = $("<button>");
         p.text(`Welcome ${this.activeUser.username}!`)
-        statusDiv.append(p);
+        account.append(p);
         button.text("Log Out");
         button.attr("id", "log-out-button");
-        statusDiv.append(button);
+        account.append(button);
         $("#overlay").empty();
     },
     writeLogInModal() {
@@ -157,6 +158,8 @@ var Queue = {
             queue.push(username);
             queue = queue.join(",")
             database.ref("/queue").set({queue})
+            Queue.listenToQueue();
+            return;
         }, 1000)
     },
     checkQueue() {
@@ -166,24 +169,95 @@ var Queue = {
         })
         setTimeout(function() {
             if (queue.length > 1) {
-                let partner = queue[1]
+                Account.activeUser.partner = queue[1]
                 queue.splice(1, 1)
                 queue = queue.join(",")
                 database.ref("/queue").set({ queue })
-                console.log(partner)
+                console.log(Account.activeUser.partner)
+                database.ref().child(Account.activeUser.partner).update({"partner": Account.activeUser.username});
                 //Start game function
+                Account.pushUser();
+                Game.startGame()
                 return;
             }
             else {
                 //Waiting function
+                Account.activeUser.status = "queue"
                 Queue.addToQueue(Account.activeUser.username)
                 return;
             }
         }, 1000)
+    },
+    listenToQueue() {
+        database.ref(`/${Account.activeUser.username}/partner`).on("value", function (snapshot) {
+            let snapshotValue = snapshot.val();
+            Account.activeUser.partner = snapshotValue;
+            Account.pushUser();
+            setTimeout(Game.startGame, 1000)
+        })
     }
 }
 
-Queue.checkQueue()
+var Game = {
+    winners: {
+        rock: "paper",
+        paper: "scissors",
+        scissors: "rock"
+    },
+    startGame() {
+        if (Account.activeUser.partner) {
+            Account.activeUser.status = "ingame"
+            $("#player-one-name").text(Account.activeUser.username);
+            let bucket = $("#player-one-text");
+            bucket.empty();
+            let rock = $("<button>");
+            rock.attr("class", "rps-button");
+            rock.attr("data-img", "assets/images/rock.png");
+            rock.attr("data-selection", "rock");
+            rock.text("Rock");
+            bucket.append(rock);
+            let paper = $("<button>");
+            paper.attr("class", "rps-button");
+            paper.attr("data-img", "assets/images/paper.png");
+            paper.attr("data-selection", "paper");
+            paper.text("Paper");
+            bucket.append(paper);
+            let scissors = $("<button>");
+            scissors.attr("class", "rps-button");
+            scissors.attr("data-img", "assets/images/scissors.png");
+            scissors.attr("data-selection", "scissors");
+            scissors.text("Scissors");
+            bucket.append(scissors);
+            $("#player-two-name").text(Account.activeUser.partner);
+            $("#player-two-text").text("Waiting for selection")
+        }
+    },
+    declareWinner(partnerSelection) {
+        let bucket = $("#player-one-text");
+        bucket.empty();
+        $("#player-two-image").html("<img width='200px' src='assets/images/" + partnerSelection + ".png'>");
+        let bucketTwo = $("#player-two-text")
+        bucketTwo.empty();
+        let button = $("<button>");
+        button.text("Play Again?");
+        button.attr("id", "play-again-button");
+        bucketTwo.append(button);
+        if (Game.winners[partnerSelection] === Account.activeUser.selection) {
+            Account.activeUser.wins += 1;
+            Account.pushUser();
+            bucket.text(Account.activeUser.selection + " beats " + partnerSelection + ", you win!")
+        }
+        else if (partnerSelection === Account.activeUser.selection) {
+            bucket.text("It's a tie!")
+        }
+        else {
+            Account.activeUser.losses += 1;
+            Account.pushUser();
+            bucket.text(partnerSelection + " beats " + Account.activeUser.selection + ", you lose!")
+        }
+    }
+}
+
 $(document).on("click", "#create-account-button", function() {
     let user = {
         username: $("#create-account-username").val(),
@@ -210,35 +284,56 @@ $(document).on("click", "#log-out-button", function() {
     Account.logOut();
 })
 
+$(document).on("click", ".rps-button", function() {
+    Game.hasPlayerOneChosen = true;
+    let selection = $(this).attr("data-selection");
+    Account.activeUser.selection = selection;
+    Account.pushUser()
+    selection = selection.charAt(0).toUpperCase() + selection.slice(1);
+    let image = $(this).attr("data-img");
+    $("#player-one-text").html(selection);
+    $("#player-one-image").html("<img width='200px' src='"+image+"'>");
+    database.ref(`/${Account.activeUser.partner}/selection`).on("value", function (snapshot) {
+        let snapshotValue = snapshot.val();
+        if (snapshotValue) {
+            if (Account.activeUser.selection) {
+                Game.declareWinner(snapshotValue)
+            }
+        }
+    })
+})
+
+$(document).on("click", "#play-again-button", function() {
+    $("#player-one-name").empty();
+    $("#player-one-text").empty();
+    $("#player-one-image").empty();
+    $("#player-two-name").empty();
+    $("#player-two-text").empty();
+    $("#player-two-image").empty();
+    database.ref().child(Account.activeUser.username).update({ "partner": null });
+    database.ref().child(Account.activeUser.username).update({ "selection": null });
+    database.ref().child(Account.activeUser.username).update({ "status": null });
+    Queue.checkQueue();
+})
+
+$(window).unload(function() {
+    if (Account.activeUser.status === "queue") {
+        var queue
+        database.ref("/queue").on("value", function (snapshot) {
+            queue = snapshot.val().queue.split(",");
+            let index = queue.indexOf(Account.activeUser.username);
+            if (index > -1) {
+                queue.splice(index, 1);
+                queue = queue.join(",");
+                database.ref("/queue").set({ queue })
+            }
+        })
+    }
+    database.ref().child(Account.activeUser.username).update({ "partner": null });
+    database.ref().child(Account.activeUser.username).update({ "selection": null });
+    database.ref().child(Account.activeUser.username).update({ "status": null });
+})
 
 Account.checkIfLoggedIn()
-//Method to execute after a user is logged in
 
-//Method to log the user in or respond that the account or password is wrong
-
-//Method to create an account
-
-//Method to call the active user data from the database
-
-//Method to send the active user data to the database
-
-//Object to store the active user and user properties
-
-//Object to store Game related methods
-
-//Method to set up the user turn
-
-//Method to set up opponent turn
-
-//Method to declare a winner
-
-var example = {
-    username: "username",
-    password: "password",
-    status: "menu | queueing | choosing | waiting | postgame",
-    partner: "partner-username",
-    sessionID: "id",
-    selection: "rock | paper | scissors",
-    wins: 0,
-    losses: 0
-}
+Queue.checkQueue()
