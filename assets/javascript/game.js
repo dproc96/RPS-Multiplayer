@@ -237,12 +237,6 @@ var Game = {
             bucket.append(scissors);
             $("#player-two-name").text(Account.activeUser.partner);
             $("#player-two-text").text("Waiting for selection")
-            database.ref(`/${Account.activeUser.username}/partner`).on("value", function(snapshot) {
-                if(!snapshot) {
-                    Account.writeLoggedInState();
-                    Queue.checkQueue();
-                }
-            })
         }
     },
     declareWinner(partnerSelection) {
