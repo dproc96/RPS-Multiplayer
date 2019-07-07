@@ -89,12 +89,15 @@ var Account = {
         console.log(this.activeUser);
     },
     writeLoggedInState() {
+        $("#overlay").attr("class", "overlay hidden");
         let account = $("#account");
         account.empty();
-        let p = $("<p>");
         let button = $("<button>");
-        p.text(`Welcome ${this.activeUser.username}!`)
-        account.append(p);
+        $("#player-one-name").text(this.activeUser.username);
+        let p = $("<p>");
+        p.text("Waiting for another player to join");
+        $("#player-one-text").empty();
+        $("#player-one-text").append(p);
         button.text("Log Out");
         button.attr("id", "log-out-button");
         account.append(button);
@@ -102,7 +105,10 @@ var Account = {
     },
     writeLogInModal() {
         let overlay = $("#overlay");
+        overlay.attr("class", "overlay");
         let logInDiv = $("<div>");
+        logInDiv.attr("id", "log-in-div");
+        logInDiv.attr("class", "overlay--div");
         let logInH3 = $("<h3>");
         let logInUsername = $("<input>");
         let logInPassword = $("<input>");
@@ -121,6 +127,8 @@ var Account = {
         logInButton.attr("id", "log-in-button");
         logInDiv.append(logInButton);
         let createAccountDiv = $("<div>");
+        createAccountDiv.attr("id", "create-account-div");
+        createAccountDiv.attr("class", "overlay--div");
         let createAccountH3 = $("<h3>");
         let createAccountUsername = $("<input>");
         let createAccountPassword = $("<input>");
@@ -207,7 +215,6 @@ var Game = {
     startGame() {
         if (Account.activeUser.partner) {
             Account.activeUser.status = "ingame"
-            $("#player-one-name").text(Account.activeUser.username);
             let bucket = $("#player-one-text");
             bucket.empty();
             let rock = $("<button>");
@@ -230,12 +237,18 @@ var Game = {
             bucket.append(scissors);
             $("#player-two-name").text(Account.activeUser.partner);
             $("#player-two-text").text("Waiting for selection")
+            database.ref(`/${Account.activeUser.username}/partner`).on("value", function(snapshot) {
+                if(!snapshot) {
+                    Account.writeLoggedInState();
+                    Queue.checkQueue();
+                }
+            })
         }
     },
     declareWinner(partnerSelection) {
         let bucket = $("#player-one-text");
         bucket.empty();
-        $("#player-two-image").html("<img width='200px' src='assets/images/" + partnerSelection + ".png'>");
+        $("#player-two-image").html("<img height='200px' src='assets/images/" + partnerSelection + ".png'>");
         let bucketTwo = $("#player-two-text")
         bucketTwo.empty();
         let button = $("<button>");
@@ -245,7 +258,7 @@ var Game = {
         if (Game.winners[partnerSelection] === Account.activeUser.selection) {
             Account.activeUser.wins += 1;
             Account.pushUser();
-            bucket.text(Account.activeUser.selection + " beats " + partnerSelection + ", you win!")
+            bucket.text("You win!")
         }
         else if (partnerSelection === Account.activeUser.selection) {
             bucket.text("It's a tie!")
@@ -253,7 +266,7 @@ var Game = {
         else {
             Account.activeUser.losses += 1;
             Account.pushUser();
-            bucket.text(partnerSelection + " beats " + Account.activeUser.selection + ", you lose!")
+            bucket.text("You lose!")
         }
     }
 }
@@ -292,7 +305,7 @@ $(document).on("click", ".rps-button", function() {
     selection = selection.charAt(0).toUpperCase() + selection.slice(1);
     let image = $(this).attr("data-img");
     $("#player-one-text").html(selection);
-    $("#player-one-image").html("<img width='200px' src='"+image+"'>");
+    $("#player-one-image").html("<img height='200px' src='"+image+"'>");
     database.ref(`/${Account.activeUser.partner}/selection`).on("value", function (snapshot) {
         let snapshotValue = snapshot.val();
         if (snapshotValue) {
@@ -328,6 +341,9 @@ $(window).unload(function() {
                 database.ref("/queue").set({ queue })
             }
         })
+    }
+    else if (Account.activeUser.status === "ingame") {
+        database.ref().child(Account.activeUser.partner).update("partner", null);
     }
     database.ref().child(Account.activeUser.username).update({ "partner": null });
     database.ref().child(Account.activeUser.username).update({ "selection": null });

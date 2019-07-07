@@ -1,0 +1,8 @@
+#page-title {
+    grid-area: title;
+}
+
+#account {
+    grid-area: button;
+    padding: 15px;
+}

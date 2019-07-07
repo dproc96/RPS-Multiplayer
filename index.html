@@ -6,33 +6,36 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Rock Paper Scissors</title>
 
+    <link href="https://fonts.googleapis.com/css?family=Cabin|Sniglet&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/reset.css">
+    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/layout.css">
+    <link rel="stylesheet" href="assets/css/module.css">
+    <link rel="stylesheet" href="assets/css/state.css">
+
     <script src="https://www.gstatic.com/firebasejs/6.0.4/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/6.0.4/firebase-database.js"></script>
     <script src="https://code.jquery.com/jquery.js"></script>
 </head>
 <body>
     <header>
-        <h1>Rock Paper Scissors</h1>
+        <h1 id="page-title">Rock Paper Scissors</h1>
 
-        <h2 id="account"></h2>
-
-        <div id="status">
-            
-        </div>
+        <div id="account"></div>
     </header>
-    <div id="overlay">
+    <div class="overlay hidden" id="overlay">
 
     </div>
     <main>
-       <div id="player-one">
-           <h3 id="player-one-name"></h3>
-           <div height="200px" width="200px" id="player-one-image"></div>
-           <div id="player-one-text"></div>
+       <div class="card">
+           <h3 class="card--name" id="player-one-name"></h3>
+           <div class="card--image" height="200px" width="200px" id="player-one-image"></div>
+           <div class="card--bucket" id="player-one-text"></div>
        </div>
-       <div id="player-two">
-           <h3 id="player-two-name"></h3>
-           <div height="200px" width="200px" id="player-two-image"></div>
-           <div id="player-two-text"></div>
+       <div class="card">
+           <h3 class="card--name" id="player-two-name"></h3>
+           <div class="card--image" height="200px" width="200px" id="player-two-image"></div>
+           <div class="card--bucket" id="player-two-text"></div>
        </div>
     </main>
     <footer>

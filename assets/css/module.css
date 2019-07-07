@@ -1,0 +1,62 @@
+.card {
+    padding: 15px;
+    background-color: #dddddd;
+    border: 1px #bbbbbb solid;
+    width: 300px;
+    display: grid;
+    grid-template-rows: 40px 250px 150px;
+    grid-template-areas: 
+        'name'
+        'image'
+        'bucket';
+    text-align: center;
+    margin: 20px;
+}
+
+.card--name {
+    grid-area: name;
+    border-bottom: #999999 2px solid;
+    padding: 10px;
+}
+
+.card--image {
+    grid-area: image;
+    border-bottom: #999999 2px solid;
+    padding: 10px;
+}
+
+.card--bucket {
+    grid-area: bucket;
+    vertical-align: middle;
+    padding: 10px;
+}
+
+.overlay {
+    position: fixed;
+    z-index: 1;
+    background-color: #dddddd;
+    box-shadow: 1px 1px 1000px 1000px rgba(0, 0, 0, 0.4);
+    width: 70vw;
+    height: 70vh;
+    top: 50%;
+    left: 50%;
+    margin-top: -35vh; 
+    margin-left: -35vw;
+    display: flex;
+    justify-content: space-around;
+}
+
+#overlay h3 {
+    margin-bottom: 25px;
+    margin-left: 5px;
+}
+
+#overlay button {
+    margin: 20px 5px;
+}
+
+.overlay--div {
+    padding: 10px;
+    margin: 10px;
+    width: 50%;
+}
