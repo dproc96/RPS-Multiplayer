@@ -21,34 +21,39 @@ var Account = {
             let sessionObj = JSON.parse(session);
             let username = sessionObj.username;
             let sessionID = sessionObj.sessionID;
-            database.ref("/"+username).on("value", function(snapshot) {
+            database.ref("/"+username).once("value", function(snapshot) {
                 let snapshotValue = snapshot.val();
                 if (snapshotValue.sessionID === sessionID) {
                     Account.setActiveUser(snapshotValue);
                     Account.writeLoggedInState()
+                    return;
                 }
                 else {
                     Account.writeLogInModal()
+                    return;
                 }
             })
         }
         else {
             Account.writeLogInModal()
+            return;
         }
     },
     createAccount(user) {
         database.ref(`/${user.username}`).set(user)
         Account.setActiveUser(user)
         Account.writeLoggedInState()
+        return;
     },
     logIn(username, password) {
-        database.ref().on("value", function(snapshot) {
+        database.ref().once("value", function(snapshot) {
             if (snapshot.hasChild(username)) {
-                database.ref(`/${username}`).on("value", function(snapshot) {
+                database.ref(`/${username}`).once("value", function(snapshot) {
                     let snapshotValue = snapshot.val();
                     if (snapshotValue.password === password) {
                         Account.setActiveUser(snapshotValue)
                         Account.writeLoggedInState()
+                        return;
                     } 
                     else {
                         //Show a message that the password was incorrect
@@ -78,13 +83,21 @@ var Account = {
         database.ref(`/${this.activeUser.username}`).set(this.activeUser);
     },
     setActiveUser(user) {
-        this.activeUser = user;
         if (user) {
+            this.activeUser = {
+                losses: user.losses,
+                password: user.password,
+                sessionID: user.sessionID,
+                username: user.username,
+                wins: user.wins
+            };
+            Account.pushUser();
             let session = {
                 username: user.username,
                 sessionID: user.sessionID
             }
             localStorage.setItem("session", JSON.stringify(session))
+            return;
         }
         console.log(this.activeUser);
     },
@@ -102,6 +115,7 @@ var Account = {
         button.attr("id", "log-out-button");
         account.append(button);
         $("#overlay").empty();
+        Queue.checkQueue();
     },
     writeLogInModal() {
         let overlay = $("#overlay");
@@ -157,51 +171,87 @@ var Account = {
 }
 
 var Queue = {
-    addToQueue(username) {
-        var queue
-        database.ref("/queue").on("value", function(snapshot) {
-            queue = snapshot.val().queue.split(",");
-        })
-        setTimeout(function() {
-            queue.push(username);
-            queue = queue.join(",")
-            database.ref("/queue").set({queue})
-            Queue.listenToQueue();
-            return;
-        }, 1000)
+    addToQueue(username, queue) {
+        queue.push(username);
+        queue = queue.join(",")
+        database.ref("/queue").set({queue})
+        Queue.listenToQueue();
+        return;
     },
     checkQueue() {
+        console.log("checking queue")
         var queue
-        database.ref("/queue").on("value", function (snapshot) {
+        database.ref("/queue").once("value").then(function (snapshot) {
             queue = snapshot.val().queue.split(",");
+            console.log(queue)
+            if (Account.activeUser.status === "queue") {
+                if (queue.length > 2) {
+                    let partnerIndex = 1;
+                    let userIndex = 1;
+                    while (queue[partnerIndex] === Account.activeUser.username) {
+                        partnerIndex++
+                    }
+                    Account.activeUser.partner = queue[partnerIndex]
+                    queue.splice(partnerIndex, 1)
+                    while (queue[userIndex] != Account.activeUser.username) {
+                        userIndex++;
+                    }
+                    queue.splice(userIndex, 1);
+                    queue = queue.join(",")
+                    database.ref("/queue").set({ queue })
+                    console.log(Account.activeUser.partner)
+                    database.ref().child(Account.activeUser.partner).update({"partner": Account.activeUser.username, "status": "ingame"});
+                    Account.activeUser.status = "ingame"
+                    //Start game function
+                    Account.pushUser();
+                    Game.startGame()
+                    return;
+                }
+                else {
+                    //Waiting function
+                    Account.pullUser();
+                    setTimeout(Queue.checkQueue, 500)
+                    return;
+                }
+            }
+            else if (Account.activeUser.partner && !Account.activeUser.selection) {
+                Game.startGame();
+            }
+            else if (!Account.activeUser.status) {
+                if (queue.length > 1) {
+                    Account.activeUser.partner = queue[1]
+                    queue.splice(1, 1)
+                    queue = queue.join(",")
+                    database.ref("/queue").set({ queue })
+                    console.log(Account.activeUser.partner)
+                    database.ref().child(Account.activeUser.partner).update({"partner": Account.activeUser.username});
+                    // database.ref().child(Account.activeUser.partner).update({"status": "ingame"})
+                    // Account.activeUser.status = "ingame"
+                    //Start game function
+                    Account.pushUser();
+                    Game.startGame()
+                    return;
+                }
+                else {
+                    //Waiting function
+                    Account.activeUser.status = "queue"
+                    Queue.addToQueue(Account.activeUser.username, queue)
+                    Account.pullUser();
+                    setTimeout(Queue.checkQueue, 500)
+                    return;
+                }
+            }
         })
-        setTimeout(function() {
-            if (queue.length > 1) {
-                Account.activeUser.partner = queue[1]
-                queue.splice(1, 1)
-                queue = queue.join(",")
-                database.ref("/queue").set({ queue })
-                console.log(Account.activeUser.partner)
-                database.ref().child(Account.activeUser.partner).update({"partner": Account.activeUser.username});
-                //Start game function
-                Account.pushUser();
-                Game.startGame()
-                return;
-            }
-            else {
-                //Waiting function
-                Account.activeUser.status = "queue"
-                Queue.addToQueue(Account.activeUser.username)
-                return;
-            }
-        }, 1000)
+        
+        // setTimeout(function() {
+        // }, 500)
     },
     listenToQueue() {
         database.ref(`/${Account.activeUser.username}/partner`).on("value", function (snapshot) {
             let snapshotValue = snapshot.val();
             Account.activeUser.partner = snapshotValue;
             Account.pushUser();
-            setTimeout(Game.startGame, 1000)
+            setTimeout(Game.startGame, 500)
         })
     }
 }
@@ -215,6 +265,7 @@ var Game = {
     startGame() {
         if (Account.activeUser.partner) {
             Account.activeUser.status = "ingame"
+            Account.pushUser()
             let bucket = $("#player-one-text");
             bucket.empty();
             let rock = $("<button>");
@@ -237,9 +288,29 @@ var Game = {
             bucket.append(scissors);
             $("#player-two-name").text(Account.activeUser.partner);
             $("#player-two-text").text("Waiting for selection")
+            database.ref(`/${Account.activeUser.username}`).once("child_removed").then(function(snapshot) {
+                if (!snapshot.val().partner) {
+                    $("#player-one-text").empty();
+                    $("#player-one-image").empty();
+                    $("#player-two-name").empty();
+                    $("#player-two-text").empty();
+                    $("#player-two-image").empty();
+                    database.ref().child(Account.activeUser.username).update({ "partner": null, "selection": null, "status": null }).then(function() {
+                            Account.activeUser.partner = null;
+                            Account.activeUser.selection = null;
+                            Account.activeUser.status = "queue";
+                            database.ref("/queue").once("value").then(function(snapshot) {
+                                queue = snapshot.val().queue.split(",");
+                                Queue.addToQueue(Account.activeUser.username, queue)
+                                Account.writeLoggedInState();
+                            })
+                    });
+                }
+            })
         }
     },
     declareWinner(partnerSelection) {
+        console.log("We have a winner")
         let bucket = $("#player-one-text");
         bucket.empty();
         $("#player-two-image").html("<img height='200px' src='assets/images/" + partnerSelection + ".png'>");
@@ -250,16 +321,12 @@ var Game = {
         button.attr("id", "play-again-button");
         bucketTwo.append(button);
         if (Game.winners[partnerSelection] === Account.activeUser.selection) {
-            Account.activeUser.wins += 1;
-            Account.pushUser();
             bucket.text("You win!")
         }
         else if (partnerSelection === Account.activeUser.selection) {
             bucket.text("It's a tie!")
         }
         else {
-            Account.activeUser.losses += 1;
-            Account.pushUser();
             bucket.text("You lose!")
         }
     }
@@ -269,7 +336,7 @@ $(document).on("click", "#create-account-button", function() {
     let user = {
         username: $("#create-account-username").val(),
         password: $("#create-account-password").val(),
-        status: "menu",
+        status: null,
         partner: null,
         sessionID: this.username+"session",
         selection: null,
@@ -311,16 +378,21 @@ $(document).on("click", ".rps-button", function() {
 })
 
 $(document).on("click", "#play-again-button", function() {
-    $("#player-one-name").empty();
     $("#player-one-text").empty();
     $("#player-one-image").empty();
     $("#player-two-name").empty();
     $("#player-two-text").empty();
     $("#player-two-image").empty();
-    database.ref().child(Account.activeUser.username).update({ "partner": null });
-    database.ref().child(Account.activeUser.username).update({ "selection": null });
-    database.ref().child(Account.activeUser.username).update({ "status": null });
-    Queue.checkQueue();
+    database.ref().child(Account.activeUser.username).update({ "partner": null, "selection": null, "status": null }).then(function() {
+        // database.ref(`/${Account.activeUser.username}`).once("value").then(function(snapshot) {
+            // Account.activeUser = snapshot.val();
+            Account.activeUser.partner = null;
+            Account.activeUser.selection = null;
+            Account.activeUser.status = null;
+            console.log(Account.activeUser)
+            Queue.checkQueue();
+        // })
+    });
 })
 
 $(window).unload(function() {
@@ -337,13 +409,11 @@ $(window).unload(function() {
         })
     }
     else if (Account.activeUser.status === "ingame") {
-        database.ref().child(Account.activeUser.partner).update("partner", null);
+        database.ref().child(Account.activeUser.partner).update({ "partner": null, "status": null });
     }
-    database.ref().child(Account.activeUser.username).update({ "partner": null });
-    database.ref().child(Account.activeUser.username).update({ "selection": null });
-    database.ref().child(Account.activeUser.username).update({ "status": null });
+    database.ref().child(Account.activeUser.username).update({ "partner": null, "selection": null, "status": null });
 })
 
 Account.checkIfLoggedIn()
 
-Queue.checkQueue()
+
